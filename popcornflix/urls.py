@@ -39,7 +39,7 @@ def api_root(request):
     """API root endpoint with available endpoints."""
     return Response({
         "message": "Welcome to Popcornflix API",
-        "version": "1.0.0",
+        "version": "1.1.0",
         "documentation": {
             "swagger_ui": "/api/docs/",
             "redoc": "/api/redoc/",
