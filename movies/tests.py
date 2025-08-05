@@ -1,3 +1,2 @@
-from django.test import TestCase
-
 # Create your tests here.
+# TODO: Add comprehensive tests for movie recommendation API
