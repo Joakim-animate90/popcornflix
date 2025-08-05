@@ -15,11 +15,11 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-# Load environment variables from .env file
-load_dotenv()
-
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
+
+# Load environment variables from .env file
+load_dotenv(BASE_DIR / '.env')
 
 
 # Quick-start development settings - unsuitable for production
@@ -47,9 +47,16 @@ INSTALLED_APPS = [
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
+    # Third party apps
+    "rest_framework",
+    "corsheaders",
+    "drf_spectacular",
+    # Local apps
+    "movies",
 ]
 
 MIDDLEWARE = [
+    "corsheaders.middleware.CorsMiddleware",
     "django.middleware.security.SecurityMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
@@ -82,12 +89,23 @@ WSGI_APPLICATION = "popcornflix.wsgi.application"
 # Database
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
 
+#log the database settings
+print("Database settings:")
+print({
+    "ENGINE": os.getenv("DB_ENGINE", "django.db.backends.postgresql"),
+    "NAME": os.getenv("DB_NAME", "popcornflix"),
+    "USER": os.getenv("DB_USER", "user"),
+    "PASSWORD": os.getenv("DB_PASSWORD", "password"),
+    "HOST": os.getenv("DB_HOST", "localhost"),
+    "PORT": os.getenv("DB_PORT", "5432"),
+})
+
 DATABASES = {
     "default": {
         "ENGINE": os.getenv("DB_ENGINE", "django.db.backends.postgresql"),
-        "NAME": os.getenv("DB_NAME", "popcornflix_db"),
-        "USER": os.getenv("DB_USER", "popcornflix_user"),
-        "PASSWORD": os.getenv("DB_PASSWORD", ""),
+        "NAME": os.getenv("DB_NAME", "popcornflix"),
+        "USER": os.getenv("DB_USER", "user"),
+        "PASSWORD": os.getenv("DB_PASSWORD", "password"),
         "HOST": os.getenv("DB_HOST", "localhost"),
         "PORT": os.getenv("DB_PORT", "5432"),
     }
@@ -136,3 +154,55 @@ STATIC_URL = "static/"
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
+
+# Django REST Framework Configuration
+REST_FRAMEWORK = {
+    'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
+    'PAGE_SIZE': 20,
+    'DEFAULT_RENDERER_CLASSES': [
+        'rest_framework.renderers.JSONRenderer',
+    ],
+    'DEFAULT_PARSER_CLASSES': [
+        'rest_framework.parsers.JSONParser',
+    ],
+    'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
+}
+
+# drf-spectacular Configuration
+SPECTACULAR_SETTINGS = {
+    'TITLE': 'Popcornflix API',
+    'DESCRIPTION': 'A comprehensive movie streaming platform API with TMDb integration',
+    'VERSION': '1.0.0',
+    'SERVE_INCLUDE_SCHEMA': False,
+    'COMPONENT_SPLIT_REQUEST': True,
+    'COMPONENT_NO_READ_ONLY_REQUIRED': True,
+    'SCHEMA_PATH_PREFIX': '/api/',
+    'TAGS': [
+        {'name': 'Movies', 'description': 'Local movie database operations'},
+        {'name': 'TMDb', 'description': 'The Movie Database API integration'},
+        {'name': 'Health', 'description': 'System health and status endpoints'},
+    ],
+    'CONTACT': {
+        'name': 'Popcornflix API Support',
+        'email': 'support@popcornflix.com',
+    },
+    'LICENSE': {
+        'name': 'MIT License',
+    },
+    'SERVERS': [
+        {
+            'url': 'http://localhost:8000',
+            'description': 'Development server',
+        },
+    ],
+}
+
+# CORS Configuration for React frontend
+CORS_ALLOWED_ORIGINS = [
+    "http://localhost:3000",  # React development server
+    "http://127.0.0.1:3000",
+]
+
+CORS_ALLOW_CREDENTIALS = True
+
+CORS_ALLOW_ALL_ORIGINS = os.getenv("DEBUG", "False").lower() == "true"  # Only in development
