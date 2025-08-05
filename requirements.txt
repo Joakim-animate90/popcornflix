@@ -1,0 +1,4 @@
+# Core Django dependencies
+Django>=5.2.4,<6.0
+python-dotenv>=1.0.0
+psycopg2-binary>=2.9.0
