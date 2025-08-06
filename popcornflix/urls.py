@@ -53,6 +53,18 @@ def api_root(request):
             },
             "endpoints": {
                 "health": "/api/health/",
+                "authentication": {
+                    "register": "/api/auth/register/",
+                    "login": "/api/auth/login/",
+                    "refresh": "/api/auth/token/refresh/",
+                    "profile": "/api/auth/profile/",
+                },
+                "user_features": {
+                    "favorites": "/api/auth/favorites/",
+                    "watchlist": "/api/auth/watchlist/",
+                    "check_favorite": "/api/auth/favorites/check/{movie_id}/",
+                    "check_watchlist": "/api/auth/watchlist/check/{movie_id}/",
+                },
                 "movies": {
                     "local_movies": "/api/movies/",
                     "local_movie_detail": "/api/movies/{id}/",
@@ -83,6 +95,7 @@ urlpatterns = [
     path("admin/", admin.site.urls),
     path("api/", api_root, name="api_root"),
     path("", include("movies.urls")),
+    path("api/auth/", include("users.urls")),
     # API Documentation
     path("api/schema/", SpectacularAPIView.as_view(), name="schema"),
     path(
