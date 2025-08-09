@@ -1,0 +1,182 @@
+name: Auto Release
+
+on:
+  push:
+    branches:
+      - develop
+  workflow_dispatch:
+    inputs:
+      release_type:
+        description: 'Type of release (patch, minor, major)'
+        required: true
+        default: 'patch'
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: joakim-animate90/popcornflix-backend
+
+jobs:
+  auto-release:
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/develop'
+    permissions:
+      contents: write
+      packages: write
+      pull-requests: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Configure Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Get latest version
+        id: version
+        run: |
+          # Get the latest tag
+          LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v1.0.0")
+          echo "latest_tag=$LATEST_TAG" >> $GITHUB_OUTPUT
+
+          # Extract version numbers
+          VERSION=${LATEST_TAG#v}
+          IFS='.' read -r -a VERSION_PARTS <<< "$VERSION"
+          MAJOR=${VERSION_PARTS[0]}
+          MINOR=${VERSION_PARTS[1]}
+          PATCH=${VERSION_PARTS[2]}
+
+          # Determine release type
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            RELEASE_TYPE="${{ github.event.inputs.release_type }}"
+          else
+            # Auto-detect based on commit messages since last tag
+            COMMITS=$(git log ${LATEST_TAG}..HEAD --oneline)
+            if echo "$COMMITS" | grep -q "BREAKING CHANGE\|feat!"; then
+              RELEASE_TYPE="major"
+            elif echo "$COMMITS" | grep -q "feat:"; then
+              RELEASE_TYPE="minor"
+            else
+              RELEASE_TYPE="patch"
+            fi
+          fi
+
+          # Calculate new version
+          case $RELEASE_TYPE in
+            major)
+              NEW_MAJOR=$((MAJOR + 1))
+              NEW_VERSION="${NEW_MAJOR}.0.0"
+              ;;
+            minor)
+              NEW_MINOR=$((MINOR + 1))
+              NEW_VERSION="${MAJOR}.${NEW_MINOR}.0"
+              ;;
+            patch)
+              NEW_PATCH=$((PATCH + 1))
+              NEW_VERSION="${MAJOR}.${MINOR}.${NEW_PATCH}"
+              ;;
+          esac
+
+          echo "new_version=$NEW_VERSION" >> $GITHUB_OUTPUT
+          echo "release_type=$RELEASE_TYPE" >> $GITHUB_OUTPUT
+
+          echo "🏷️ Current version: $VERSION"
+          echo "📈 Release type: $RELEASE_TYPE"
+          echo "🚀 New version: $NEW_VERSION"
+
+      - name: Check if release needed
+        id: check
+        run: |
+          # Check if there are new commits since last tag
+          LATEST_TAG="${{ steps.version.outputs.latest_tag }}"
+          COMMITS_SINCE_TAG=$(git rev-list ${LATEST_TAG}..HEAD --count 2>/dev/null || echo "1")
+
+          if [ "$COMMITS_SINCE_TAG" -gt 0 ]; then
+            echo "needs_release=true" >> $GITHUB_OUTPUT
+            echo "✅ Found $COMMITS_SINCE_TAG new commits since $LATEST_TAG"
+          else
+            echo "needs_release=false" >> $GITHUB_OUTPUT
+            echo "ℹ️ No new commits since $LATEST_TAG - skipping release"
+          fi
+
+      - name: Create and push release
+        if: steps.check.outputs.needs_release == 'true'
+        run: |
+          NEW_VERSION="${{ steps.version.outputs.new_version }}"
+
+          # Switch to main branch
+          git checkout main
+          git pull origin main
+
+          # Merge develop into main
+          git merge origin/develop --no-ff -m "chore: merge develop into main for release v$NEW_VERSION"
+
+          # Create and push tag
+          git tag -a "v$NEW_VERSION" -m "Release v$NEW_VERSION"
+          git push origin main
+          git push origin "v$NEW_VERSION"
+
+          # Switch back to develop and merge main back
+          git checkout develop
+          git merge main --no-ff -m "chore: merge release v$NEW_VERSION back to develop"
+          git push origin develop
+
+      - name: Generate release notes
+        if: steps.check.outputs.needs_release == 'true'
+        id: release_notes
+        run: |
+          NEW_VERSION="${{ steps.version.outputs.new_version }}"
+          LATEST_TAG="${{ steps.version.outputs.latest_tag }}"
+
+          # Generate changelog
+          echo "## 🚀 Release v$NEW_VERSION" > release_notes.md
+          echo "" >> release_notes.md
+          echo "### Changes" >> release_notes.md
+          git log ${LATEST_TAG}..HEAD --pretty=format:"- %s (%h)" >> release_notes.md
+          echo "" >> release_notes.md
+          echo "" >> release_notes.md
+          echo "### Docker Images" >> release_notes.md
+          echo "- \`${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:$NEW_VERSION\`" >> release_notes.md
+          echo "- \`${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest\`" >> release_notes.md
+          echo "" >> release_notes.md
+          echo "### Deployment" >> release_notes.md
+          echo "\`\`\`bash" >> release_notes.md
+          echo "docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:$NEW_VERSION" >> release_notes.md
+          echo "\`\`\`" >> release_notes.md
+
+          # Read the content for GitHub release
+          RELEASE_BODY=$(cat release_notes.md)
+          echo "release_body<<EOF" >> $GITHUB_OUTPUT
+          echo "$RELEASE_BODY" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Create GitHub Release
+        if: steps.check.outputs.needs_release == 'true'
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: v${{ steps.version.outputs.new_version }}
+          release_name: Release v${{ steps.version.outputs.new_version }}
+          body: ${{ steps.release_notes.outputs.release_body }}
+          draft: false
+          prerelease: false
+
+      - name: Notify results
+        if: always()
+        run: |
+          if [ "${{ steps.check.outputs.needs_release }}" = "true" ]; then
+            echo "🎉 Successfully created release v${{ steps.version.outputs.new_version }}"
+            echo "📦 Docker images will be built by the release workflow"
+          else
+            echo "ℹ️ No release needed - no new commits since last tag"
+          fi
