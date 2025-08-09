@@ -1,5 +1,5 @@
 # Multi-stage build for production-ready Django app
-FROM python:3.10-slim as builder
+FROM python:3.10-slim AS builder
 
 # Build arguments
 ARG VERSION=dev
@@ -26,7 +26,7 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Production stage
-FROM python:3.10-slim as production
+FROM python:3.10-slim AS production
 
 # Build arguments
 ARG VERSION=dev
@@ -46,7 +46,9 @@ LABEL org.opencontainers.image.title="Popcornflix Backend" \
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     DJANGO_SETTINGS_MODULE=popcornflix.settings \
-    APP_VERSION=${VERSION}
+    APP_VERSION=${VERSION} \
+    STATIC_ROOT=/app/staticfiles \
+    MEDIA_ROOT=/app/media
 
 # Install runtime dependencies
 RUN apt-get update && apt-get install -y \
@@ -66,15 +68,16 @@ COPY --from=builder /usr/local/bin /usr/local/bin
 # Copy project files
 COPY . .
 
-# Create necessary directories
+# Create necessary directories and set permissions
 RUN mkdir -p /app/staticfiles /app/media && \
     chown -R django:django /app
 
 # Switch to non-root user
 USER django
 
-# Collect static files
-RUN python manage.py collectstatic --noinput
+# Collect static files (with database configuration disabled for static collection)
+ENV DATABASE_URL=sqlite:///tmp/build.db
+RUN python manage.py collectstatic --noinput --clear
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
