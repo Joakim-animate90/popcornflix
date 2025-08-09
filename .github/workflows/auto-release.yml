@@ -145,12 +145,12 @@ jobs:
           echo "" >> release_notes.md
           echo "" >> release_notes.md
           echo "### Docker Images" >> release_notes.md
-          echo "- \`${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:$NEW_VERSION\`" >> release_notes.md
+          echo "- \`${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:v$NEW_VERSION\`" >> release_notes.md
           echo "- \`${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest\`" >> release_notes.md
           echo "" >> release_notes.md
           echo "### Deployment" >> release_notes.md
           echo "\`\`\`bash" >> release_notes.md
-          echo "docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:$NEW_VERSION" >> release_notes.md
+          echo "docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:v$NEW_VERSION" >> release_notes.md
           echo "\`\`\`" >> release_notes.md
 
           # Read the content for GitHub release
