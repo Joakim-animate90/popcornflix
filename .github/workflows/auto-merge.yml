@@ -6,6 +6,10 @@ on:
       - develop
   workflow_dispatch:
 
+concurrency:
+  group: merge-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   auto-merge:
     runs-on: ubuntu-latest
