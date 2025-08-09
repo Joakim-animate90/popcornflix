@@ -1,0 +1,174 @@
+name: Manual Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version_type:
+        description: 'Type of version bump'
+        required: true
+        default: 'patch'
+        type: choice
+        options:
+          - major
+          - minor
+          - patch
+      release_notes:
+        description: 'Release notes (optional)'
+        required: false
+        type: string
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      packages: write
+      attestations: write
+      id-token: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Configure Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Get current version
+        id: current_version
+        run: |
+          # Get the latest tag, default to v0.0.0 if no tags exist
+          LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
+          echo "current_tag=$LATEST_TAG" >> $GITHUB_OUTPUT
+          echo "📋 Current version: $LATEST_TAG"
+
+      - name: Calculate new version
+        id: new_version
+        run: |
+          CURRENT_TAG="${{ steps.current_version.outputs.current_tag }}"
+          VERSION_TYPE="${{ github.event.inputs.version_type }}"
+
+          # Remove 'v' prefix if present
+          CURRENT_VERSION=${CURRENT_TAG#v}
+
+          # Split version into components
+          IFS='.' read -ra VERSION_PARTS <<< "$CURRENT_VERSION"
+          MAJOR=${VERSION_PARTS[0]:-0}
+          MINOR=${VERSION_PARTS[1]:-0}
+          PATCH=${VERSION_PARTS[2]:-0}
+
+          # Increment based on type
+          case $VERSION_TYPE in
+            major)
+              MAJOR=$((MAJOR + 1))
+              MINOR=0
+              PATCH=0
+              ;;
+            minor)
+              MINOR=$((MINOR + 1))
+              PATCH=0
+              ;;
+            patch)
+              PATCH=$((PATCH + 1))
+              ;;
+          esac
+
+          NEW_VERSION="$MAJOR.$MINOR.$PATCH"
+          NEW_TAG="v$NEW_VERSION"
+
+          echo "new_version=$NEW_VERSION" >> $GITHUB_OUTPUT
+          echo "new_tag=$NEW_TAG" >> $GITHUB_OUTPUT
+          echo "🏷️ New version: $NEW_TAG"
+
+      - name: Create release tag
+        run: |
+          NEW_TAG="${{ steps.new_version.outputs.new_tag }}"
+
+          # Create and push tag
+          git tag -a "$NEW_TAG" -m "Release $NEW_TAG"
+          git push origin "$NEW_TAG"
+
+          echo "✅ Created and pushed tag: $NEW_TAG"
+
+      - name: Generate changelog
+        id: changelog
+        run: |
+          NEW_TAG="${{ steps.new_version.outputs.new_tag }}"
+          CURRENT_TAG="${{ steps.current_version.outputs.current_tag }}"
+
+          echo "📝 Generating changelog..."
+
+          # Generate changelog between tags
+          if [ "$CURRENT_TAG" != "v0.0.0" ]; then
+            CHANGELOG=$(git log ${CURRENT_TAG}..HEAD --pretty=format:"- %s" --no-merges)
+          else
+            CHANGELOG=$(git log --pretty=format:"- %s" --no-merges)
+          fi
+
+          # Create changelog file
+          cat > CHANGELOG.md << EOF
+          ## What's Changed
+
+          $CHANGELOG
+
+          **Full Changelog**: https://github.com/${{ github.repository }}/compare/${CURRENT_TAG}...${NEW_TAG}
+          EOF
+
+          echo "changelog_content<<EOF" >> $GITHUB_OUTPUT
+          cat CHANGELOG.md >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: |
+            ghcr.io/joakim-animate90/popcornflix-backend:${{ steps.new_version.outputs.new_version }}
+            ghcr.io/joakim-animate90/popcornflix-backend:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Create GitHub Release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ steps.new_version.outputs.new_tag }}
+          release_name: Release ${{ steps.new_version.outputs.new_tag }}
+          body: |
+            ${{ github.event.inputs.release_notes }}
+
+            ${{ steps.changelog.outputs.changelog_content }}
+
+            ## Docker Image
+            ```bash
+            docker pull ghcr.io/joakim-animate90/popcornflix-backend:${{ steps.new_version.outputs.new_version }}
+            ```
+          draft: false
+          prerelease: false
+
+      - name: Update develop branch
+        run: |
+          # Ensure develop is up to date with the new tag
+          git checkout develop
+          git pull origin develop
+          git merge main --no-ff -m "chore: sync develop with main after release ${{ steps.new_version.outputs.new_tag }}"
+          git push origin develop
+
+          echo "🔄 Updated develop branch with release changes"

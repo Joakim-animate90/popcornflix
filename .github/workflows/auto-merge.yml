@@ -1,0 +1,81 @@
+name: Auto Merge to Main
+
+on:
+  push:
+    branches:
+      - develop
+  workflow_dispatch:
+
+jobs:
+  auto-merge:
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/develop'
+    permissions:
+      contents: write
+      pull-requests: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Configure Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Check for changes
+        id: changes
+        run: |
+          # Get the last commit on main
+          git fetch origin main
+          MAIN_HEAD=$(git rev-parse origin/main)
+          DEVELOP_HEAD=$(git rev-parse HEAD)
+
+          if [ "$MAIN_HEAD" != "$DEVELOP_HEAD" ]; then
+            echo "has_changes=true" >> $GITHUB_OUTPUT
+            echo "✅ Changes detected between main and develop"
+          else
+            echo "has_changes=false" >> $GITHUB_OUTPUT
+            echo "ℹ️ No changes between main and develop"
+          fi
+
+      - name: Merge develop to main
+        if: steps.changes.outputs.has_changes == 'true'
+        run: |
+          # Switch to main and merge develop
+          git checkout main
+          git pull origin main
+          git merge origin/develop --no-ff -m "chore: auto-merge develop to main
+
+          Auto-merged by GitHub Actions
+
+          Commits included:
+          $(git log origin/main..origin/develop --oneline)"
+
+          # Push to main
+          git push origin main
+
+          echo "🚀 Successfully merged develop to main"
+
+      - name: Create Pull Request (Alternative)
+        if: steps.changes.outputs.has_changes == 'true' && false  # Disabled by default
+        uses: peter-evans/create-pull-request@v5
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          base: main
+          head: develop
+          title: "🔄 Auto-merge develop to main"
+          body: |
+            ## Automated Merge Request
+
+            This PR automatically merges the latest changes from `develop` to `main`.
+
+            ### Changes
+            - Latest development features and fixes
+            - All tests passing on develop branch
+
+            **This PR will be auto-merged if CI passes.**
+          draft: false
