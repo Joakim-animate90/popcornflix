@@ -13,7 +13,7 @@ concurrency:
 jobs:
   auto-merge:
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/develop'
+    if: false  # Disabled - auto-release workflow handles merging
     permissions:
       contents: write
       pull-requests: write
