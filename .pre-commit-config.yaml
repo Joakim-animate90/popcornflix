@@ -39,14 +39,14 @@ repos:
     hooks:
       - id: django-check
         name: Django Check
-        entry: python manage.py check
+        entry: ./hooks/django-check.sh
         language: system
         pass_filenames: false
         files: \.(py)$
 
       - id: django-migrations-check
         name: Django Migrations Check
-        entry: python manage.py makemigrations --check --dry-run
+        entry: ./hooks/django-migrations-check.sh
         language: system
         pass_filenames: false
         files: \.(py)$
