@@ -20,6 +20,10 @@ env:
   REGISTRY: ghcr.io
   IMAGE_NAME: joakim-animate90/popcornflix-backend
 
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   auto-release:
     runs-on: ubuntu-latest
@@ -113,20 +117,36 @@ jobs:
         run: |
           NEW_VERSION="${{ steps.version.outputs.new_version }}"
 
-          # Switch to main branch
-          git checkout main
+          # Switch to main branch and ensure it's up to date
+          git checkout main || git checkout -b main origin/main
           git pull origin main
 
-          # Merge develop into main
-          git merge origin/develop --no-ff -m "chore: merge develop into main for release v$NEW_VERSION"
+          # Merge develop into main with retry logic
+          for i in {1..3}; do
+            if git merge origin/develop --no-ff -m "chore: merge develop into main for release v$NEW_VERSION"; then
+              break
+            fi
+            echo "Merge attempt $i failed, retrying..."
+            git reset --hard origin/main
+            git pull origin main
+            sleep $((i * 5))
+          done
 
-          # Create and push tag
+          # Create and push tag with retry logic
           git tag -a "v$NEW_VERSION" -m "Release v$NEW_VERSION"
-          git push origin main
-          git push origin "v$NEW_VERSION"
+
+          for i in {1..3}; do
+            git pull origin main --no-edit
+            if git push origin main && git push origin "v$NEW_VERSION"; then
+              break
+            fi
+            echo "Push attempt $i failed, retrying..."
+            sleep $((i * 5))
+          done
 
           # Switch back to develop and merge main back
           git checkout develop
+          git pull origin develop
           git merge main --no-ff -m "chore: merge release v$NEW_VERSION back to develop"
           git push origin develop
 
