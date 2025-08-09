@@ -8,7 +8,7 @@ from drf_spectacular.utils import (
     extend_schema,
     extend_schema_view,
 )
-from rest_framework import generics, status
+from rest_framework import generics, permissions, status
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -48,6 +48,7 @@ class MovieListAPIView(generics.ListAPIView):
     queryset = Movie.objects.all()
     serializer_class = MovieSerializer
     pagination_class = StandardResultsSetPagination
+    permission_classes = [permissions.AllowAny]
 
 
 @extend_schema_view(
