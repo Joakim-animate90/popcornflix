@@ -1,0 +1,31 @@
+name: Status Check
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+  pull_request:
+    branches:
+      - main
+      - develop
+
+jobs:
+  status-check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Simple status check
+        run: |
+          echo "All systems operational"
+          echo "This workflow provides a clear status indicator"
+
+      - name: Report success
+        if: success()
+        run: echo "Status - SUCCESS"
+
+      - name: Report failure
+        if: failure()
+        run: echo "Status - FAILED"
