@@ -48,11 +48,9 @@ jobs:
       - name: Get latest version
         id: version
         run: |
-          # Get the latest tag
-          LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v1.0.0")
-          echo "latest_tag=$LATEST_TAG" >> $GITHUB_OUTPUT
-
-          # Extract version numbers
+          # Get the latest tag (ensure minimum v1.0.0)
+          LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.9.0")
+          echo "latest_tag=$LATEST_TAG" >> $GITHUB_OUTPUT          # Extract version numbers
           VERSION=${LATEST_TAG#v}
           IFS='.' read -r -a VERSION_PARTS <<< "$VERSION"
           MAJOR=${VERSION_PARTS[0]}
@@ -74,7 +72,7 @@ jobs:
             fi
           fi
 
-          # Calculate new version
+          # Calculate new version (ensure >= v1.0.0)
           case $RELEASE_TYPE in
             major)
               NEW_MAJOR=$((MAJOR + 1))
@@ -89,6 +87,13 @@ jobs:
               NEW_VERSION="${MAJOR}.${MINOR}.${NEW_PATCH}"
               ;;
           esac
+
+          # Ensure version is >= 1.0.0
+          IFS='.' read -r -a NEW_VERSION_PARTS <<< "$NEW_VERSION"
+          if [ "${NEW_VERSION_PARTS[0]}" -lt 1 ]; then
+            NEW_VERSION="1.0.0"
+            echo "⬆️ Bumping to minimum version v1.0.0"
+          fi
 
           echo "new_version=$NEW_VERSION" >> $GITHUB_OUTPUT
           echo "release_type=$RELEASE_TYPE" >> $GITHUB_OUTPUT
@@ -165,12 +170,16 @@ jobs:
           echo "" >> release_notes.md
           echo "" >> release_notes.md
           echo "### Docker Images" >> release_notes.md
-          echo "- \`${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:v$NEW_VERSION\`" >> release_notes.md
-          echo "- \`${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest\`" >> release_notes.md
+          echo "- \`${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:v$NEW_VERSION\` (semantic version)" >> release_notes.md
+          echo "- \`${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest\` (always points to highest semantic version)" >> release_notes.md
           echo "" >> release_notes.md
           echo "### Deployment" >> release_notes.md
           echo "\`\`\`bash" >> release_notes.md
+          echo "# Use specific version (recommended for production)" >> release_notes.md
           echo "docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:v$NEW_VERSION" >> release_notes.md
+          echo "" >> release_notes.md
+          echo "# Use latest (always points to highest semantic version)" >> release_notes.md
+          echo "docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest" >> release_notes.md
           echo "\`\`\`" >> release_notes.md
 
           # Read the content for GitHub release
