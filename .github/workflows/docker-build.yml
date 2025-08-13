@@ -45,10 +45,11 @@ jobs:
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
-            type=ref,event=branch,enable=false
+            type=ref,event=branch
             type=ref,event=pr
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}}
             type=raw,value=latest,enable={{is_default_branch}}
             type=raw,value=develop,enable=${{ github.ref == 'refs/heads/develop' }}
 
